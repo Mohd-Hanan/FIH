@@ -448,7 +448,7 @@ export default async function handler(req, res) {
 
   await connectDB();
 
-  // Find user by WhatsApp number (flexible digit matching & single-user fallback)
+  // Find user by WhatsApp number (flexible digit matching & single-user/multi-user fallback)
   const cleanFrom = from.replace(/\D/g, '');
   const allUsers = await User.find({});
   let user = allUsers.find(u => {
@@ -456,17 +456,22 @@ export default async function handler(req, res) {
     return userDigits && (userDigits === cleanFrom || cleanFrom.endsWith(userDigits) || userDigits.endsWith(cleanFrom));
   });
 
-  if (!user && allUsers.length === 1) {
-    user = allUsers[0];
+  if (!user && allUsers.length > 0) {
+    user = allUsers.find(u => u.whatsappNumber) || allUsers[0];
   }
 
   if (!user) {
-    console.warn('Unknown WhatsApp sender:', from);
+    console.warn('[Webhook] No user found in database at all');
     return res.status(200).end();
   }
 
+  console.log(`[Webhook] Matched user: ${user.email} (ID: ${user._id}) for incoming from: ${from}, Text: "${text}"`);
+
   const userId = user._id;
-  const reply = (msg) => sendWhatsAppMessage(from, msg);
+  const reply = async (msg) => {
+    const sendRes = await sendWhatsAppMessage(from, msg);
+    return sendRes;
+  };
 
   // Deduplicate message processing via ProcessedMessage TTL collection (atomic create-first)
   try {
