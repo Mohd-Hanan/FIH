@@ -673,6 +673,20 @@ export default async function handler(req, res) {
   }
 
   const messageObj = change?.value?.messages?.[0];
+  const statusesObj = change?.value?.statuses?.[0];
+
+  // Log incoming webhook to DB for live debugging
+  try {
+    await connectDB();
+    const WebhookLog = (await import('@/models/WebhookLog')).default;
+    const summary = messageObj 
+      ? `Incoming message from ${messageObj.from}: "${messageObj.text?.body || messageObj.type}"` 
+      : (statusesObj ? `Status update: ${statusesObj.status} for ${statusesObj.recipient_id} (${statusesObj.errors ? JSON.stringify(statusesObj.errors) : 'ok'})` : 'Non-message event');
+    await WebhookLog.create({ summary, payload });
+  } catch (logErr) {
+    console.error('[WebhookLog Error]', logErr);
+  }
+
   if (!messageObj) return res.status(200).end(); // ACK non-message events
 
   const messageId = messageObj.id;
